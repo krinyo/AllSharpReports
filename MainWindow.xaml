@@ -1,12 +1,51 @@
 ﻿<Window x:Class="AllSharpReports.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:AllSharpReports"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="SQL Report Generator" Height="350" Width="500">
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
+        <!-- SQL Query TextBox with Expander -->
+        <Expander Grid.Row="0" Header="SQL Query" ExpandDirection="Down" IsExpanded="True">
+            <TextBox x:Name="txtSqlQuery" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
+        </Expander>
+
+        <!-- Database Credentials -->
+        <TextBlock Grid.Row="1" Text="Database Credentials" FontWeight="Bold" Margin="0,5,0,0"/>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,5,0,0">
+            <TextBlock Text="Server Address:" Margin="0,0,5,0"/>
+            <TextBox x:Name="txtServerAddress" Width="200"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,5,0,0">
+            <TextBlock Text="Username:" Margin="0,0,5,0"/>
+            <TextBox x:Name="txtUsername" Width="200"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,5,0,0">
+            <TextBlock Text="Password:" Margin="0,0,5,0"/>
+            <PasswordBox x:Name="txtPassword" Width="200"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,5,0,0">
+            <TextBlock Text="Database Name:" Margin="0,0,5,0"/>
+            <TextBox x:Name="txtDatabaseName" Width="200"/>
+        </StackPanel>
+
+        <!-- Execute Button -->
+        <Button Grid.Row="6" Content="Execute" Click="ExecuteButton_Click" Margin="0,10,0,0"/>
+
+        <!-- DataGrid to Display Results -->
+        <DataGrid x:Name="dataGrid" Grid.Row="7" AutoGenerateColumns="True" Visibility="Collapsed"/>
     </Grid>
 </Window>
