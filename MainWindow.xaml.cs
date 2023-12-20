@@ -1,5 +1,4 @@
 ﻿using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Data;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
@@ -9,123 +8,50 @@ using System.Windows;
 using System.Windows.Controls;
 using MySql.Data.MySqlClient;
 
+
 namespace AllSharpReports
 {
     public partial class MainWindow : Window
     {
+        #region Fields and Properties
+
         private ObservableCollection<FilterParameter> filterParameters;
         private ObservableCollection<SavedQuery> savedQueries = new ObservableCollection<SavedQuery>();
 
-        public class FilterParameter : INotifyPropertyChanged
-        {
-            private string _field;
-            private string _operator;
-            private string _value;
+        #endregion
 
-            public List<string> Operators { get; } = new List<string> { "=", "<", ">", "<=", ">=", "CONTAINS" };
-
-            public string Field
-            {
-                get { return _field; }
-                set
-                {
-                    if (_field != value)
-                    {
-                        _field = value;
-                        OnPropertyChanged(nameof(Field));
-                    }
-                }
-            }
-
-            public string Operator
-            {
-                get { return _operator; }
-                set
-                {
-                    if (_operator != value)
-                    {
-                        _operator = value;
-                        OnPropertyChanged(nameof(Operator));
-                    }
-                }
-            }
-
-            public string Value
-            {
-                get { return _value; }
-                set
-                {
-                    if (_value != value)
-                    {
-                        _value = value;
-                        OnPropertyChanged(nameof(Value));
-                    }
-                }
-            }
-
-            public event PropertyChangedEventHandler PropertyChanged;
-
-            protected virtual void OnPropertyChanged(string propertyName)
-            {
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-            }
-        }
-        [Serializable]
-        public class SavedQuery
-        {
-            public string Name { get; set; }
-            public string Query { get; set; }
-        }
-        [Serializable]
-        public class Credentials
-        {
-            public string ServerAddress { get; set; }
-            public string Username { get; set; }
-            public string Password { get; set; }
-            public string DatabaseName { get; set; }
-        }
+        #region Constructor
 
         public MainWindow()
         {
             InitializeComponent();
-            
+            InitializeData();
+        }
+
+        private void InitializeData()
+        {
             filterParameters = new ObservableCollection<FilterParameter>();
             filterFieldsPanel.DataContext = filterParameters;
+
             LoadCredentials();
-            LoadSavedQueries();  // Загрузка сохраненных запросов
+            LoadSavedQueries();  // Load saved queries
         }
+
+        #endregion
+
+        #region Event Handlers
 
         private void SaveCredentialsButton_Click(object sender, RoutedEventArgs e)
         {
-            Credentials credentials = new Credentials
-            {
-                ServerAddress = txtServerAddress.Text,
-                Username = txtUsername.Text,
-                Password = txtPassword.Password,
-                DatabaseName = txtDatabaseName.Text
-            };
-
-            SaveCredentials(credentials);
+            SaveCredentials(CreateCredentialsFromUI());
         }
 
         private void CheckQueryButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // Проверяем корректность SQL запроса
-                using (MySqlConnection connection = new MySqlConnection(GetConnectionString()))
-                {
-                    connection.Open();
-                    using (MySqlCommand command = new MySqlCommand(txtSqlQuery.Text, connection))
-                    {
-                        command.ExecuteNonQuery();
-                    }
-                }
-
-                // Генерируем фильтры
+                CheckSqlQuery();
                 GenerateFilters();
-
-                // Установка DataContext для filterFieldsPanel
                 filterFieldsPanel.DataContext = filterParameters;
             }
             catch (Exception ex)
@@ -136,12 +62,10 @@ namespace AllSharpReports
             MessageBox.Show("Success");
         }
 
-
         private void CreateReportButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                // Генерируем отчет
                 GenerateReport();
             }
             catch (Exception ex)
@@ -149,6 +73,20 @@ namespace AllSharpReports
                 MessageBox.Show($"Error creating report: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        private void SaveQueryButton_Click(object sender, RoutedEventArgs e)
+        {
+            SaveCurrentQuery();
+        }
+
+        private void QueryComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            LoadSelectedQuery();
+        }
+
+        #endregion
+
+        #region Save and Load Credentials
 
         private void SaveCredentials(Credentials credentials)
         {
@@ -177,10 +115,7 @@ namespace AllSharpReports
                         BinaryFormatter formatter = new BinaryFormatter();
                         Credentials credentials = (Credentials)formatter.Deserialize(fs);
 
-                        txtServerAddress.Text = credentials.ServerAddress;
-                        txtUsername.Text = credentials.Username;
-                        txtPassword.Password = credentials.Password;
-                        txtDatabaseName.Text = credentials.DatabaseName;
+                        SetCredentialsUI(credentials);
                     }
                 }
             }
@@ -190,73 +125,9 @@ namespace AllSharpReports
             }
         }
 
-        private string GetConnectionString()
-        {
-            return $"Server={txtServerAddress.Text};Database={txtDatabaseName.Text};User ID={txtUsername.Text};Password={txtPassword.Password};CharSet=utf8mb3;";
-        }
+        #endregion
 
-        private void GenerateFilters()
-        {
-            filterParameters.Clear();
-
-            // Извлекаем поля из SELECT части SQL запроса
-            string pattern = @"SELECT(.+?)FROM";
-            Match match = Regex.Match(txtSqlQuery.Text, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            if (match.Success)
-            {
-                string selectFields = match.Groups[1].Value;
-
-                // Разделяем поля по запятой, учитывая, что ',' внутри функций (например, CONCAT) не являются разделителями
-                string[] fields = Regex.Split(selectFields, @",(?![^\(]*\))");
-
-                foreach (string field in fields)
-                {
-                    // Извлекаем имя поля
-                    string cleanedField = Regex.Replace(field, @"\s+AS\s+\S+$", string.Empty).Trim();
-
-                    // Если поле содержит CONCAT, то обработаем его особо
-                    if (cleanedField.Contains("CONCAT"))
-                    {
-                        // Извлекаем все аргументы CONCAT
-                        MatchCollection concatArgs = Regex.Matches(cleanedField, @"CONCAT\(([^)]+)\)");
-                        foreach (Match concatArg in concatArgs)
-                        {
-                            string[] argFields = concatArg.Groups[1].Value.Split(',');
-                            foreach (string argField in argFields)
-                            {
-                                string cleanedArgField = argField.Trim();
-                                if (!string.IsNullOrEmpty(cleanedArgField))
-                                {
-                                    filterParameters.Add(new FilterParameter
-                                    {
-                                        Field = cleanedArgField,
-                                        Operator = "CONTAINS",
-                                        Value = string.Empty
-                                    });
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        if (!string.IsNullOrEmpty(cleanedField))
-                        {
-                            filterParameters.Add(new FilterParameter
-                            {
-                                Field = cleanedField,
-                                Operator = "CONTAINS",
-                                Value = string.Empty
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-
-
-
-
+        #region SQL Query and Filters
         private void GenerateReport()
         {
             try
@@ -300,7 +171,7 @@ namespace AllSharpReports
                             DataTable dataTable = new DataTable();
                             // Display row count
                             int rowCount = adapter.Fill(dataTable);
-                            rowCountTextBlock.Text = $"Row Count: {rowCount}";
+                            rowCountTextBlock.Text = $"{rowCount}";
 
                             // Отображаем результаты в DataGrid
                             dataGrid.ItemsSource = dataTable.DefaultView;
@@ -314,19 +185,105 @@ namespace AllSharpReports
                 MessageBox.Show($"Error generating report: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
-        private void SaveQueryButton_Click(object sender, RoutedEventArgs e)
+        private void CheckSqlQuery()
         {
-            // Сохраняем текущий запрос с запрошенным именем
+            using (MySqlConnection connection = new MySqlConnection(GetConnectionString()))
+            {
+                connection.Open();
+                using (MySqlCommand command = new MySqlCommand(txtSqlQuery.Text, connection))
+                {
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+
+        private void GenerateFilters()
+        {
+            filterParameters.Clear();
+
+            string selectFields = ExtractSelectFieldsFromQuery(txtSqlQuery.Text);
+            string[] fields = SplitFields(selectFields);
+
+            foreach (string field in fields)
+            {
+                // Process each field
+                ProcessField(field);
+            }
+        }
+
+        private string ExtractSelectFieldsFromQuery(string query)
+        {
+            string pattern = @"SELECT(.+?)FROM";
+            Match match = Regex.Match(query, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            return match.Success ? match.Groups[1].Value : string.Empty;
+        }
+
+        private string[] SplitFields(string selectFields)
+        {
+            // Split fields considering ',' inside functions
+            return Regex.Split(selectFields, @",(?![^\(]*\))");
+        }
+
+        private void ProcessField(string field)
+        {
+            string cleanedField = Regex.Replace(field, @"\s+AS\s+\S+$", string.Empty).Trim();
+
+            if (cleanedField.Contains("CONCAT"))
+            {
+                ProcessConcatField(cleanedField);
+            }
+            else
+            {
+                AddFilterParameter(cleanedField);
+            }
+        }
+
+        private void ProcessConcatField(string concatField)
+        {
+            MatchCollection concatArgs = Regex.Matches(concatField, @"CONCAT\(([^)]+)\)");
+
+            foreach (Match concatArg in concatArgs)
+            {
+                string[] argFields = concatArg.Groups[1].Value.Split(',');
+
+                foreach (string argField in argFields)
+                {
+                    string cleanedArgField = argField.Trim();
+                    if (!string.IsNullOrEmpty(cleanedArgField))
+                    {
+                        AddFilterParameter(cleanedArgField);
+                    }
+                }
+            }
+        }
+
+        private void AddFilterParameter(string field)
+        {
+            filterParameters.Add(new FilterParameter
+            {
+                Field = field,
+                Operator = "CONTAINS",
+                Value = string.Empty
+            });
+        }
+
+        #endregion
+
+        #region Save and Load Queries
+
+        private void SaveCurrentQuery()
+        {
             string queryName = Microsoft.VisualBasic.Interaction.InputBox("Enter a name for the query:", "Save Query", "");
+
             if (!string.IsNullOrWhiteSpace(queryName))
             {
                 string currentQuery = txtSqlQuery.Text;
+
                 if (!string.IsNullOrWhiteSpace(currentQuery))
                 {
                     SavedQuery savedQuery = new SavedQuery { Name = queryName, Query = currentQuery };
                     savedQueries.Add(savedQuery);
-                    SaveSavedQueries();  // Сохранение изменений в сохраненных запросах
+                    SaveSavedQueries();
                 }
             }
         }
@@ -341,20 +298,16 @@ namespace AllSharpReports
                     {
                         BinaryFormatter formatter = new BinaryFormatter();
 
-                        // Проверяем, что поток не пустой
                         if (fs.Length > 0)
                         {
-                            // Десериализуем сохраненные запросы
                             savedQueries = (ObservableCollection<SavedQuery>)formatter.Deserialize(fs);
                         }
                         else
                         {
-                            // Если поток пуст, инициализируем пустым списком
                             savedQueries = new ObservableCollection<SavedQuery>();
                         }
                     }
 
-                    // Обновляем ComboBox с сохраненными запросами
                     queryComboBox.ItemsSource = savedQueries.Select(q => q.Name);
                 }
             }
@@ -363,7 +316,6 @@ namespace AllSharpReports
                 MessageBox.Show($"Error loading saved queries: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-
 
         private void SaveSavedQueries()
         {
@@ -375,7 +327,6 @@ namespace AllSharpReports
                     formatter.Serialize(fs, savedQueries);
                 }
 
-                // Обновляем ComboBox с сохраненными запросами
                 queryComboBox.ItemsSource = savedQueries.Select(q => q.Name);
             }
             catch (Exception ex)
@@ -383,7 +334,8 @@ namespace AllSharpReports
                 MessageBox.Show($"Error saving saved queries: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
-        private void QueryComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+
+        private void LoadSelectedQuery()
         {
             if (queryComboBox.SelectedItem != null)
             {
@@ -399,7 +351,34 @@ namespace AllSharpReports
             GenerateFilters();
         }
 
+        #endregion
+
+        #region Helpers
+
+        private Credentials CreateCredentialsFromUI()
+        {
+            return new Credentials
+            {
+                ServerAddress = txtServerAddress.Text,
+                Username = txtUsername.Text,
+                Password = txtPassword.Password,
+                DatabaseName = txtDatabaseName.Text
+            };
+        }
+
+        private void SetCredentialsUI(Credentials credentials)
+        {
+            txtServerAddress.Text = credentials.ServerAddress;
+            txtUsername.Text = credentials.Username;
+            txtPassword.Password = credentials.Password;
+            txtDatabaseName.Text = credentials.DatabaseName;
+        }
+
+        private string GetConnectionString()
+        {
+            return $"Server={txtServerAddress.Text};Database={txtDatabaseName.Text};User ID={txtUsername.Text};Password={txtPassword.Password};CharSet=utf8mb3;";
+        }
+
+        #endregion
     }
-
 }
-
