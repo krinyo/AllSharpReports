@@ -55,6 +55,9 @@
             <Button Content="Save Query" Click="SaveQueryButton_Click" Margin="5"/>
             <Button Content="Check Query" Click="CheckQueryButton_Click" Margin="5"/>
             <Button Content="Create Report" Click="CreateReportButton_Click" Margin="5"/>
+            <!-- Кнопка для экспорта в Excel -->
+            <Button Content="Export to Excel" Click="ExportToExcelButton_Click" Margin="5"/>
+
         </StackPanel>
 
         <!-- Dynamic Filter Fields -->

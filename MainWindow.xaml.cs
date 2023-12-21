@@ -6,8 +6,13 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using MySql.Data.MySqlClient;
-
+using NPOI.HSSF.UserModel;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
+using SpreadsheetLight;
 
 namespace AllSharpReports
 {
@@ -378,6 +383,79 @@ namespace AllSharpReports
         {
             return $"Server={txtServerAddress.Text};Database={txtDatabaseName.Text};User ID={txtUsername.Text};Password={txtPassword.Password};CharSet=utf8mb3;";
         }
+
+        #endregion
+
+        #region Export
+
+        private void ExportToExcelButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Check if there are rows in the DataGrid
+                if (dataGrid.Items.Count > 0)
+                {
+                    DataTable dataTable = ((DataView)dataGrid.ItemsSource).Table;
+
+                    // Create SaveFileDialog
+                    Microsoft.Win32.SaveFileDialog saveFileDialog = new Microsoft.Win32.SaveFileDialog
+                    {
+                        FileName = "ExportedData",
+                        DefaultExt = ".xlsx",
+                        Filter = "Excel Workbook (.xlsx)|*.xlsx|All Files|*.*"
+                    };
+
+                    // Show SaveFileDialog
+                    bool? result = saveFileDialog.ShowDialog();
+
+                    if (result == true)
+                    {
+                        string filePath = saveFileDialog.FileName;
+
+                        // Export data to Excel
+                        ExportDataTableToExcel(dataTable, filePath);
+
+                        MessageBox.Show("Export successful!", "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("No data to export. Please generate a report first.", "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error exporting to Excel: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ExportDataTableToExcel(DataTable dataTable, string filePath)
+        {
+            // Use NPOI library to export DataTable to Excel
+            using (SLDocument sl = new SLDocument())
+            {
+                // Add columns
+                for (int col = 1; col <= dataTable.Columns.Count; col++)
+                {
+                    sl.SetCellValue(1, col, dataTable.Columns[col - 1].ColumnName);
+                }
+
+                // Add data
+                for (int row = 1; row <= dataTable.Rows.Count; row++)
+                {
+                    for (int col = 1; col <= dataTable.Columns.Count; col++)
+                    {
+                        // Convert the value to string before setting it in the cell
+                        sl.SetCellValue(row + 1, col, dataTable.Rows[row - 1][col - 1].ToString());
+                    }
+                }
+
+                // Save to file
+                sl.SaveAs(filePath);
+            }
+        }
+
+
 
         #endregion
     }
